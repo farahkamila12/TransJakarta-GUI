@@ -91,13 +91,15 @@ def main_menu(df):
         st.session_state.user_id = None
         go_to('login')
 
-# CORRIDOR PAGE
+# CORRIDOR PAGE (dengan dropdown yang bisa diketik)
 def corridor_page(df):
     st.title("🛣️ Cari Koridor")
 
-    route_name = st.text_input("Masukkan Route Name:")
-    if st.button("Cari"):
-        matched = df[df['routeName'].str.lower() == route_name.lower()]
+    route_list = df['routeName'].dropna().unique().tolist()
+    selected_route = st.selectbox("Pilih atau ketik nama rute:", sorted(route_list), placeholder="Contoh: Rute 1")
+
+    if selected_route and st.button("Cari"):
+        matched = df[df['routeName'] == selected_route]
         if not matched.empty:
             st.success(f"Corridor Name: {matched.iloc[0]['corridorName']}")
         else:
