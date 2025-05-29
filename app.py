@@ -1,103 +1,147 @@
 import streamlit as st
 import pandas as pd
-import os
-
-EXCEL_FILE = "transjakarta pixxx.xlsx"
 
 # ==========================
-# Load & Save Data
+# Load Data
 # ==========================
 @st.cache_data
 def load_data():
-    return pd.read_excel(EXCEL_FILE, sheet_name="transjakarta")
+    df = pd.read_excel("transjakarta pixxx.xlsx", sheet_name="transjakarta")
+    df['payUserID'] = df['payUserID'].astype(str)
+    users_df = df[['payUserID', 'typeCard', 'userName', 'userSex', 'userBirthYear']].drop_duplicates()
+    return df, users_df
 
-def save_data(df):
-    df.to_excel(EXCEL_FILE, index=False, sheet_name="transjakarta")
-
-df = load_data()
-
-# ==========================
-# Fungsi
-# ==========================
-def get_user_profile(pay_id):
-    data = df[df['payUserID'] == pay_id]
-    if data.empty:
-        return None
-    user = data.iloc[0]
-    return {
-        "Nama": user["userName"],
-        "Jenis Kartu": user["typeCard"],
-        "Jenis Kelamin": user["userSex"],
-        "Tahun Lahir": user["userBirthYear"]
-    }
-
-def get_user_history(pay_id):
-    return df[df["payUserID"] == pay_id][[
-        'transID', 'routeID', 'transDate', 'tapInHour', 'tapOutHour',
-        'duration', 'payAmount', 'direction'
-    ]]
-
-def search_corridor(route_name):
-    return df[df['routeName'] == route_name][['corridorID', 'corridorName']].drop_duplicates()
+df, users_df = load_data()
 
 # ==========================
-# Aplikasi Streamlit
+# Session states
 # ==========================
-st.set_page_config(page_title="Aplikasi Transjakarta", layout="wide")
-st.title("🚍 Aplikasi Transjakarta")
+if 'page' not in st.session_state:
+    st.session_state.page = 'login'
+if 'user_id' not in st.session_state:
+    st.session_state.user_id = None
+if 'users' not in st.session_state:
+    st.session_state.users = users_df.copy()
+if 'df' not in st.session_state:
+    st.session_state.df = df.copy()
 
-menu = st.sidebar.selectbox("Menu", ["Login", "Register", "Cari Koridor"])
+# ==========================
+# Navigasi
+# ==========================
+def go_to(page):
+    st.session_state.page = page
 
-if menu == "Login":
-    pay_id = st.text_input("Masukkan Pay User ID")
+# LOGIN PAGE
+def login_page():
+    st.title("🔐 Login Pengguna")
 
-    if st.button("Login"):
-        if pay_id in df['payUserID'].astype(str).values:
-            st.success("Login berhasil!")
-            profile = get_user_profile(pay_id)
-            if profile:
-                st.subheader("👤 Profil Pengguna")
-                for k, v in profile.items():
-                    st.write(f"**{k}**: {v}")
+    pay_id = st.text_input("Masukkan PayUserID:")
+    login = st.button("Login")
+    register = st.button("Register")
 
-            if st.button("Tampilkan Riwayat"):
-                st.subheader("📈 Riwayat Perjalanan")
-                history = get_user_history(pay_id)
-                st.dataframe(history)
+    if login:
+        if pay_id in st.session_state.users['payUserID'].values:
+            st.session_state.user_id = pay_id
+            go_to('main_menu')
         else:
-            st.error("Pay User ID tidak ditemukan.")
+            st.error("PayUserID tidak ditemukan. Silakan registrasi.")
 
-elif menu == "Register":
-    st.subheader("📝 Registrasi Pengguna Baru")
-    new_id = st.text_input("Pay User ID")
-    name = st.text_input("Nama")
-    card = st.text_input("Jenis Kartu")
-    sex = st.selectbox("Jenis Kelamin", ["Male", "Female"])
-    birth = st.number_input("Tahun Lahir", min_value=1900, max_value=2025, step=1)
+    if register:
+        go_to('register')
+
+# REGISTER PAGE
+def register_page():
+    st.title("📝 Register Pengguna Baru")
+
+    payUserID = st.text_input("PayUserID")
+    typeCard = st.text_input("Jenis Kartu")
+    userName = st.text_input("Nama")
+    userSex = st.selectbox("Jenis Kelamin", ["Laki-laki", "Perempuan"])
+    userBirthYear = st.number_input("Tahun Lahir", min_value=1900, max_value=2025, value=2000)
 
     if st.button("Daftar"):
-        if new_id in df["payUserID"].astype(str).values:
-            st.warning("User ID sudah ada.")
+        if payUserID in st.session_state.users['payUserID'].values:
+            st.error("PayUserID sudah terdaftar.")
         else:
-            new_user = {
-                "payUserID": new_id,
-                "userName": name,
-                "typeCard": card,
-                "userSex": sex,
-                "userBirthYear": birth
-            }
-            df = pd.concat([df, pd.DataFrame([new_user])], ignore_index=True)
-            save_data(df)
+            new_user = pd.DataFrame([{
+                "payUserID": payUserID,
+                "typeCard": typeCard,
+                "userName": userName,
+                "userSex": userSex,
+                "userBirthYear": userBirthYear
+            }])
+            st.session_state.users = pd.concat([st.session_state.users, new_user], ignore_index=True)
             st.success("Registrasi berhasil!")
+            go_to('login')
 
-elif menu == "Cari Koridor":
-    st.subheader("🔍 Cari Koridor Berdasarkan Rute")
-    route_list = df['routeName'].dropna().unique().tolist()
-    selected_route = st.selectbox("Pilih Rute", sorted(route_list))
+    if st.button("Kembali"):
+        go_to('login')
+
+# MAIN MENU
+def main_menu(df):
+    user_id = st.session_state.user_id
+    user = st.session_state.users[st.session_state.users['payUserID'] == user_id].iloc[0]
+    st.title(f"👋 Selamat datang, {user['userName']}!")
 
     if st.button("Cari Koridor"):
-        result = search_corridor(selected_route)
-        if not result.empty:
-            st.dataframe(result)
+        go_to('corridor')
+    if st.button("Cek Riwayat"):
+        go_to('history')
+    if st.button("Logout"):
+        st.session_state.user_id = None
+        go_to('login')
+
+# CORRIDOR PAGE
+def corridor_page(df):
+    st.title("🛣️ Cari Koridor")
+
+    route_name = st.text_input("Masukkan Route Name:")
+    if st.button("Cari"):
+        matched = df[df['routeName'].str.lower() == route_name.lower()]
+        if not matched.empty:
+            st.success(f"Corridor Name: {matched.iloc[0]['corridorName']}")
         else:
-            st.info("Koridor tidak ditemukan.")
+            st.error("Koridor tidak ditemukan.")
+
+    if st.button("Kembali"):
+        go_to('main_menu')
+
+# HISTORY PAGE
+def history_page(df):
+    st.title("📜 Riwayat Perjalanan")
+
+    user_id = st.session_state.user_id
+    user_data = st.session_state.users[st.session_state.users['payUserID'] == user_id]
+
+    if user_data.empty:
+        st.error("User tidak ditemukan.")
+        return
+
+    user = user_data.iloc[0]
+    st.write(f"**Nama**: {user['userName']}")
+    st.write(f"**Tipe Kartu**: {user['typeCard']}")
+    st.write(f"**Jenis Kelamin**: {user['userSex']}")
+    st.write(f"**Tahun Lahir**: {user['userBirthYear']}")
+
+    history = df[df['payUserID'] == user_id][['transID', 'routeID', 'transDate', 'tapInHour', 'tapOutHour', 'duration', 'direction']]
+    if history.empty:
+        st.warning("Tidak ada riwayat perjalanan.")
+    else:
+        st.dataframe(history.reset_index(drop=True))
+
+    if st.button("Kembali"):
+        go_to('main_menu')
+
+# ==========================
+# ROUTING
+# ==========================
+if st.session_state.page == 'login':
+    login_page()
+elif st.session_state.page == 'register':
+    register_page()
+elif st.session_state.page == 'main_menu':
+    main_menu(st.session_state.df)
+elif st.session_state.page == 'corridor':
+    corridor_page(st.session_state.df)
+elif st.session_state.page == 'history':
+    history_page(st.session_state.df)
