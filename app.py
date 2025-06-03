@@ -59,8 +59,10 @@ def register_page():
     userSex = st.selectbox("Jenis Kelamin", ["Laki-laki", "Perempuan"])
     userBirthYear = st.number_input("Tahun Lahir", min_value=1900, max_value=2025, value=2000)
 
-    if st.button("Daftar"):
-        if payUserID in st.session_state.users['payUserID'].values:
+       if st.button("Daftar"):
+        if not payUserID.isdigit() or len(payUserID) != 12:
+            st.error("PayUserID harus terdiri dari 12 digit angka.")
+        elif payUserID in st.session_state.users['payUserID'].values:
             st.error("PayUserID sudah terdaftar.")
         else:
             new_user = pd.DataFrame([{
@@ -73,6 +75,7 @@ def register_page():
             st.session_state.users = pd.concat([st.session_state.users, new_user], ignore_index=True)
             st.success("Registrasi berhasil!")
             go_to('login')
+
 
     if st.button("Kembali"):
         go_to('login')
