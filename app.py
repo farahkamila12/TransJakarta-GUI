@@ -6,7 +6,7 @@ import pandas as pd
 # ==========================
 @st.cache_data
 def load_data():
-    df = pd.read_excel("TransJakarta_cleaned.xlsx", sheet_name="transjakarta")
+    df = pd.read_excel("transjakarta pixxx.xlsx", sheet_name="transjakarta")
     df['payUserID'] = df['payUserID'].astype(str)
     users_df = df[['payUserID', 'typeCard', 'userName', 'userSex', 'userBirthYear']].drop_duplicates()
     return df, users_df
