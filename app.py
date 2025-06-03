@@ -1,4 +1,4 @@
-import streamlit as st
+import streamlit as st 
 import pandas as pd
 
 # ==========================
@@ -6,7 +6,7 @@ import pandas as pd
 # ==========================
 @st.cache_data
 def load_data():
-    df = pd.read_excel("transjakarta pixxx.xlsx", sheet_name="transjakarta")
+    df = pd.read_excel("TransJakarta_FP.xlsx", sheet_name="TransJakarta")  
     df['payUserID'] = df['payUserID'].astype(str)
     users_df = df[['payUserID', 'typeCard', 'userName', 'userSex', 'userBirthYear']].drop_duplicates()
     return df, users_df
@@ -91,7 +91,7 @@ def main_menu(df):
         st.session_state.user_id = None
         go_to('login')
 
-# CORRIDOR PAGE (dengan dropdown yang bisa diketik)
+# CORRIDOR PAGE
 def corridor_page(df):
     st.title("🛣️ Cari Koridor")
 
@@ -125,7 +125,8 @@ def history_page(df):
     st.write(f"**Jenis Kelamin**: {user['userSex']}")
     st.write(f"**Tahun Lahir**: {user['userBirthYear']}")
 
-    history = df[df['payUserID'] == user_id][['transID', 'routeID', 'transDate', 'tapInHour', 'tapOutHour', 'duration', 'direction']]
+    # tampilkan hanya kolom-kolom yang tersedia
+    history = df[df['payUserID'] == user_id][['transID', 'routeID', 'transDate', 'duration', 'direction']]
     if history.empty:
         st.warning("Tidak ada riwayat perjalanan.")
     else:
