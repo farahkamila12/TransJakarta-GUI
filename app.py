@@ -1,13 +1,17 @@
-import streamlit as st
+import streamlit as st 
 import pandas as pd
 import sqlite3
 import os
 
 # ==========================
-# Inisialisasi database SQLite
+# Konstanta & File Login
 # ==========================
 DB_NAME = "transjakarta_users.db"
+LOGIN_FILE = "login_status.txt"
 
+# ==========================
+# Inisialisasi database SQLite
+# ==========================
 def init_db():
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
@@ -53,10 +57,33 @@ def insert_user(user_data):
     conn.close()
 
 # ==========================
-# Session states
+# Helper Login File
+# ==========================
+def save_login_status(user_id):
+    with open(LOGIN_FILE, "w") as f:
+        f.write(user_id)
+
+def load_login_status():
+    if os.path.exists(LOGIN_FILE):
+        with open(LOGIN_FILE, "r") as f:
+            return f.read().strip()
+    return None
+
+def clear_login_status():
+    if os.path.exists(LOGIN_FILE):
+        os.remove(LOGIN_FILE)
+
+# ==========================
+# Session States
 # ==========================
 if 'page' not in st.session_state:
-    st.session_state.page = 'login'
+    saved_user = load_login_status()
+    if saved_user:
+        st.session_state.user_id = saved_user
+        st.session_state.page = 'main_menu'
+    else:
+        st.session_state.page = 'login'
+
 if 'user_id' not in st.session_state:
     st.session_state.user_id = None
 
@@ -64,7 +91,7 @@ def go_to(page):
     st.session_state.page = page
 
 # ==========================
-# Halaman Login
+# Login Page
 # ==========================
 def login_page():
     st.title("🙌🏻 Selamat Datang Pengguna TransJakarta!")
@@ -77,6 +104,7 @@ def login_page():
         user = get_user(pay_id)
         if not user.empty:
             st.session_state.user_id = pay_id
+            save_login_status(pay_id)
             go_to('main_menu')
         else:
             st.error("PayUserID tidak ditemukan. Silakan registrasi.")
@@ -85,7 +113,7 @@ def login_page():
         go_to('register')
 
 # ==========================
-# Halaman Registrasi
+# Register Page
 # ==========================
 def register_page():
     st.title("📝 Register Pengguna Baru")
@@ -112,11 +140,12 @@ def register_page():
         go_to('login')
 
 # ==========================
-# Halaman Menu Utama
+# Main Menu
 # ==========================
 def main_menu():
     user = get_user(st.session_state.user_id).iloc[0]
     st.title(f"👋 Selamat datang, {user['userName']}!")
+    st.info(f"Kamu sedang login sebagai {st.session_state.user_id}")
 
     if st.button("Cari Kode Koridor"):
         go_to('corridor')
@@ -124,10 +153,11 @@ def main_menu():
         go_to('history')
     if st.button("Logout"):
         st.session_state.user_id = None
+        clear_login_status()
         go_to('login')
 
 # ==========================
-# Cari Koridor
+# Corridor Page
 # ==========================
 def corridor_page():
     st.title("🛣️ Cari Kode Koridor")
@@ -146,7 +176,7 @@ def corridor_page():
         go_to('main_menu')
 
 # ==========================
-# Riwayat Perjalanan
+# History Page
 # ==========================
 def history_page():
     st.title("📜 Riwayat Perjalanan")
@@ -170,7 +200,7 @@ def history_page():
         go_to('main_menu')
 
 # ==========================
-# Routing Halaman
+# Routing
 # ==========================
 if st.session_state.page == 'login':
     login_page()
