@@ -3,6 +3,15 @@ import pandas as pd
 import sqlite3
 import os
 
+from supabase import create_client, Client
+import os
+
+# Load dari secrets
+SUPABASE_URL = os.getenv("https://krqpuwyugbrapglkaaex.supabase.co")
+SUPABASE_KEY = os.getenv("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtycXB1d3l1Z2JyYXBnbGthYWV4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDkwMjA0MDcsImV4cCI6MjA2NDU5NjQwN30.LY8sXPdtMSAbqfPaZcgf8QIJLjECGfigufIP6o489-M")
+
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
 # ==========================
 # Konstanta & File Login
 # ==========================
@@ -44,17 +53,15 @@ df = load_data()
 # Helper DB
 # ==========================
 def get_user(payUserID):
-    conn = sqlite3.connect(DB_NAME)
-    user = pd.read_sql_query("SELECT * FROM users WHERE payUserID = ?", conn, params=(payUserID,))
-    conn.close()
-    return user
+def get_user(payUserID):
+    response = supabase.table("users").select("*").eq("payUserID", payUserID).execute()
+    data = response.data
+    return pd.DataFrame(data)
 
 def insert_user(user_data):
-    conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
-    c.execute("INSERT INTO users VALUES (?, ?, ?, ?, ?)", user_data)
-    conn.commit()
-    conn.close()
+    keys = ["payUserID", "typeCard", "userName", "userSex", "userBirthYear"]
+    values = dict(zip(keys, user_data))
+    supabase.table("users").insert(values).execute()
 
 # ==========================
 # Helper Login File
