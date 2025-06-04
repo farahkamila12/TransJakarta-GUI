@@ -1,160 +1,184 @@
-from sqlite.db_creator import insert_csv_to_sqlite
-import sqlite3
-import pandas as pd
 import streamlit as st
+import pandas as pd
+import sqlite3
 import os
 
 # ==========================
-# Konstanta & Inisialisasi
+# Inisialisasi database SQLite
 # ==========================
-DB_PATH = "transjakarta.db"
-TABLE_NAME = "transjakarta"
-CSV_PATH = "/Users/raihanwibowo/Documents/maira/kuliah/TRIALGUI1/TransJakarta_cleaned - fix.csv"
+DB_NAME = "transjakarta_users.db"
+
+def init_db():
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            payUserID TEXT PRIMARY KEY,
+            typeCard TEXT,
+            userName TEXT,
+            userSex TEXT,
+            userBirthYear INTEGER
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+init_db()
 
 # ==========================
-# Load dan Siapkan Data
+# Load data Excel
 # ==========================
-if not os.path.exists(DB_PATH):
-    insert_csv_to_sqlite(CSV_PATH)
+@st.cache_data
+def load_data():
+    df = pd.read_excel("TransJakarta_PIX.xlsx", sheet_name="FIX")
+    df['payUserID'] = df['payUserID'].astype(str)
+    return df
 
-conn = sqlite3.connect(DB_PATH)
-print(f"successfully connect to the database {TABLE_NAME}")
-
-df = pd.read_sql_query(f"SELECT * FROM {TABLE_NAME}", conn)
-df = df.dropna(subset=['payUserID'])
-df['payUserID'] = df['payUserID'].apply(lambda x: str(int(float(x)))).str.strip()
-users_df = df[['payUserID', 'typeCard', 'userName', 'userSex', 'userBirthYear']].drop_duplicates()
+df = load_data()
 
 # ==========================
-# Streamlit UI Title
+# Helper DB
 # ==========================
-st.title("🚍 TransJakarta Travel Tracker")
+def get_user(payUserID):
+    conn = sqlite3.connect(DB_NAME)
+    user = pd.read_sql_query("SELECT * FROM users WHERE payUserID = ?", conn, params=(payUserID,))
+    conn.close()
+    return user
+
+def insert_user(user_data):
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    c.execute("INSERT INTO users VALUES (?, ?, ?, ?, ?)", user_data)
+    conn.commit()
+    conn.close()
 
 # ==========================
-# Session State
+# Session states
 # ==========================
 if 'page' not in st.session_state:
     st.session_state.page = 'login'
-
 if 'user_id' not in st.session_state:
     st.session_state.user_id = None
 
+def go_to(page):
+    st.session_state.page = page
+
 # ==========================
-# LOGIN PAGE
+# Halaman Login
 # ==========================
-if st.session_state.page == 'login':
-    st.header("🔐 Login Pengguna")
-    user_input = st.text_input("Masukkan PayUserID")
+def login_page():
+    st.title("🙌🏻 Selamat Datang Pengguna TransJakarta!")
+
+    pay_id = st.text_input("Masukkan PayUserID:")
     login = st.button("Login")
     register = st.button("Register")
 
     if login:
-        if user_input in users_df['payUserID'].values:
-            st.session_state.user_id = user_input
-            st.session_state.page = 'main_menu'
+        user = get_user(pay_id)
+        if not user.empty:
+            st.session_state.user_id = pay_id
+            go_to('main_menu')
         else:
-            st.warning("PayUserID tidak ditemukan. Silakan registrasi.")
+            st.error("PayUserID tidak ditemukan. Silakan registrasi.")
 
     if register:
-        st.session_state.page = 'register'
+        go_to('register')
 
 # ==========================
-# REGISTER PAGE
+# Halaman Registrasi
 # ==========================
-elif st.session_state.page == 'register':
-    st.header("📝 Registrasi Pengguna Baru")
-    new_id = st.text_input("PayUserID")
-    type_card = st.selectbox("Jenis Kartu", sorted(df['typeCard'].dropna().unique()))
-    name = st.text_input("Nama")
-    sex = st.selectbox("Jenis Kelamin", ["Laki-laki", "Perempuan"])
-    birth_year = st.number_input("Tahun Lahir", min_value=1900, max_value=2025, value=2000)
+def register_page():
+    st.title("📝 Register Pengguna Baru")
 
-    daftar = st.button("Daftar")
-    kembali = st.button("Kembali")
+    payUserID = st.text_input("PayUserID")
+    typeCard = st.selectbox("Jenis Kartu", ["BRIZZI", "E-Money", "Flazz", "JakCard", "MegaCash", "TapCash"])
+    userName = st.text_input("Nama")
+    userSex = st.selectbox("Jenis Kelamin", ["Laki-laki", "Perempuan"])
+    userBirthYear = st.number_input("Tahun Lahir", min_value=1900, max_value=2025, value=2000)
 
-    if daftar:
-        if not (new_id.isdigit() and len(new_id) == 12):
-            st.warning("PayUserID harus terdiri dari 12 digit angka.")
-        elif new_id in users_df['payUserID'].values:
-            st.warning("PayUserID sudah terdaftar.")
-        elif not name.strip():
-            st.warning("Nama tidak boleh kosong.")
-        elif not type_card or not sex or not birth_year:
-            st.warning("Semua kolom harus diisi.")
+    if st.button("Daftar"):
+        if not payUserID.strip() or not userName.strip():
+            st.error("Semua kolom harus diisi!")
+        elif not payUserID.isdigit() or len(payUserID) != 12:
+            st.error("PayUserID harus terdiri dari 12 digit angka.")
+        elif not get_user(payUserID).empty:
+            st.error("PayUserID sudah terdaftar.")
         else:
-            conn.execute(f"""
-                INSERT INTO {TABLE_NAME} (payUserID, typeCard, userName, userSex, userBirthYear)
-                VALUES (?, ?, ?, ?, ?)
-            """, (new_id, type_card, name.strip(), sex, int(birth_year)))
-            conn.commit()
-
-            users_df.loc[len(users_df)] = [new_id, type_card, name.strip(), sex, birth_year]
-
+            insert_user((payUserID, typeCard, userName, userSex, userBirthYear))
             st.success("Registrasi berhasil!")
-            st.session_state.page = 'login'
-
-    if kembali:
-        st.session_state.page = 'login'
-
-# ==========================
-# MAIN MENU
-# ==========================
-elif st.session_state.page == 'main_menu':
-    user = users_df[users_df['payUserID'] == st.session_state.user_id].iloc[0]
-    st.success(f"👋 Selamat datang, {user['userName']}!")
-
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        if st.button("Cek Riwayat"):
-            st.session_state.page = 'history'
-    with col2:
-        if st.button("Cari Kode Koridor"):
-            st.session_state.page = 'corridor'
-    with col3:
-        if st.button("Logout"):
-            st.session_state.page = 'login'
-            st.session_state.user_id = None
-
-# ==========================
-# HISTORY PAGE
-# ==========================
-elif st.session_state.page == 'history':
-    st.header("📜 Riwayat Perjalanan")
-    user = users_df[users_df['payUserID'] == st.session_state.user_id].iloc[0]
-
-    st.info(f"""
-    **Nama:** {user['userName']}  
-    **Tipe Kartu:** {user['typeCard']}  
-    **Jenis Kelamin:** {user['userSex']}  
-    **Tahun Lahir:** {user['userBirthYear']}
-    """)
-
-    user_data = pd.read_sql_query("""
-        SELECT transID, routeID, transDate, tapInTime, tapOutTime, duration, direction
-        FROM transjakarta WHERE payUserID = ?
-    """, conn, params=(st.session_state.user_id,))
-
-    if user_data.empty:
-        st.info("Tidak ada riwayat perjalanan.")
-    else:
-        st.dataframe(user_data)
+            go_to('login')
 
     if st.button("Kembali"):
-        st.session_state.page = 'main_menu'
+        go_to('login')
 
 # ==========================
-# CORRIDOR PAGE
+# Halaman Menu Utama
 # ==========================
-elif st.session_state.page == 'corridor':
-    st.header("🛣️ Cari Kode Koridor")
-    selected = st.selectbox("Pilih Rute", sorted(df['routeName'].dropna().unique()))
+def main_menu():
+    user = get_user(st.session_state.user_id).iloc[0]
+    st.title(f"👋 Selamat datang, {user['userName']}!")
 
-    if st.button("Cari"):
-        matched = df[df['routeName'] == selected]
+    if st.button("Cari Kode Koridor"):
+        go_to('corridor')
+    if st.button("Cek Riwayat"):
+        go_to('history')
+    if st.button("Logout"):
+        st.session_state.user_id = None
+        go_to('login')
+
+# ==========================
+# Cari Koridor
+# ==========================
+def corridor_page():
+    st.title("🛣️ Cari Kode Koridor")
+
+    route_list = df['routeName'].dropna().unique().tolist()
+    selected_route = st.selectbox("Pilih atau ketik nama rute:", sorted(route_list), placeholder="Contoh: Rute 1")
+
+    if selected_route and st.button("Cari"):
+        matched = df[df['routeName'] == selected_route]
         if not matched.empty:
             st.success(f"✅ Kode Koridor: {matched.iloc[0]['corridorID']}")
         else:
-            st.warning("Kode rute tidak ditemukan.")
+            st.error("❌ Kode koridor tidak ditemukan.")
 
     if st.button("Kembali"):
-        st.session_state.page = 'main_menu'
+        go_to('main_menu')
+
+# ==========================
+# Riwayat Perjalanan
+# ==========================
+def history_page():
+    st.title("📜 Riwayat Perjalanan")
+
+    user = get_user(st.session_state.user_id).iloc[0]
+    st.write(f"**Nama**: {user['userName']}")
+    st.write(f"**Tipe Kartu**: {user['typeCard']}")
+    st.write(f"**Jenis Kelamin**: {user['userSex']}")
+    st.write(f"**Tahun Lahir**: {user['userBirthYear']}")
+
+    history = df[df['payUserID'] == st.session_state.user_id][[
+        'transID', 'routeID', 'transDate', 'tapInTime', 'tapOutTime', 'duration', 'direction'
+    ]]
+
+    if history.empty:
+        st.warning("⚠️ Tidak ada riwayat perjalanan.")
+    else:
+        st.dataframe(history.reset_index(drop=True))
+
+    if st.button("Kembali"):
+        go_to('main_menu')
+
+# ==========================
+# Routing Halaman
+# ==========================
+if st.session_state.page == 'login':
+    login_page()
+elif st.session_state.page == 'register':
+    register_page()
+elif st.session_state.page == 'main_menu':
+    main_menu()
+elif st.session_state.page == 'corridor':
+    corridor_page()
+elif st.session_state.page == 'history':
+    history_page()
